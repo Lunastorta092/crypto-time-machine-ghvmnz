@@ -1,7 +1,10 @@
 
 import { CryptoPrice } from '@/types/crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BYBIT_API_BASE = 'https://api.bybit.com';
+const API_KEY_STORAGE = '@bybit_api_key';
+const API_SECRET_STORAGE = '@bybit_api_secret';
 
 export class BybitApiService {
   private apiKey: string;
@@ -12,10 +15,59 @@ export class BybitApiService {
     this.apiSecret = apiSecret;
   }
 
-  setCredentials(apiKey: string, apiSecret: string) {
-    this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
-    console.log('API credentials updated');
+  async loadCredentials(): Promise<{ apiKey: string; apiSecret: string }> {
+    try {
+      const apiKey = await AsyncStorage.getItem(API_KEY_STORAGE);
+      const apiSecret = await AsyncStorage.getItem(API_SECRET_STORAGE);
+      
+      if (apiKey && apiSecret) {
+        this.apiKey = apiKey;
+        this.apiSecret = apiSecret;
+        console.log('API credentials loaded from storage');
+        return { apiKey, apiSecret };
+      }
+      
+      return { apiKey: '', apiSecret: '' };
+    } catch (error) {
+      console.error('Error loading credentials:', error);
+      return { apiKey: '', apiSecret: '' };
+    }
+  }
+
+  async setCredentials(apiKey: string, apiSecret: string): Promise<void> {
+    try {
+      this.apiKey = apiKey;
+      this.apiSecret = apiSecret;
+      
+      await AsyncStorage.setItem(API_KEY_STORAGE, apiKey);
+      await AsyncStorage.setItem(API_SECRET_STORAGE, apiSecret);
+      
+      console.log('API credentials saved to storage');
+    } catch (error) {
+      console.error('Error saving credentials:', error);
+      throw error;
+    }
+  }
+
+  async clearCredentials(): Promise<void> {
+    try {
+      this.apiKey = '';
+      this.apiSecret = '';
+      
+      await AsyncStorage.removeItem(API_KEY_STORAGE);
+      await AsyncStorage.removeItem(API_SECRET_STORAGE);
+      
+      console.log('API credentials cleared');
+    } catch (error) {
+      console.error('Error clearing credentials:', error);
+    }
+  }
+
+  getCredentials(): { apiKey: string; apiSecret: string } {
+    return {
+      apiKey: this.apiKey,
+      apiSecret: this.apiSecret,
+    };
   }
 
   async getTickerPrice(symbol: string): Promise<CryptoPrice | null> {

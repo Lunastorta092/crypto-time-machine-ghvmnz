@@ -41,12 +41,28 @@ export default function HomeScreen() {
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
+  const [credentialsLoaded, setCredentialsLoaded] = useState(false);
 
   useEffect(() => {
+    loadApiCredentials();
     loadCryptoPrices();
     const interval = setInterval(loadCryptoPrices, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
+
+  const loadApiCredentials = async () => {
+    try {
+      const credentials = await bybitApi.loadCredentials();
+      if (credentials.apiKey && credentials.apiSecret) {
+        setApiKey(credentials.apiKey);
+        setApiSecret(credentials.apiSecret);
+        setCredentialsLoaded(true);
+        console.log('API credentials loaded successfully');
+      }
+    } catch (error) {
+      console.error('Error loading API credentials:', error);
+    }
+  };
 
   const loadCryptoPrices = async () => {
     try {
@@ -170,14 +186,49 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSaveApiConfig = () => {
+  const handleSaveApiConfig = async () => {
     if (apiKey.trim() && apiSecret.trim()) {
-      bybitApi.setCredentials(apiKey.trim(), apiSecret.trim());
-      Alert.alert('Success', 'API credentials saved successfully!');
-      setShowApiConfig(false);
+      try {
+        await bybitApi.setCredentials(apiKey.trim(), apiSecret.trim());
+        Alert.alert('Success', 'API credentials saved successfully!');
+        setShowApiConfig(false);
+        setCredentialsLoaded(true);
+      } catch (error) {
+        console.error('Error saving credentials:', error);
+        Alert.alert('Error', 'Failed to save API credentials. Please try again.');
+      }
     } else {
       Alert.alert('Error', 'Please enter both API Key and API Secret.');
     }
+  };
+
+  const handleClearApiConfig = async () => {
+    Alert.alert(
+      'Clear API Credentials',
+      'Are you sure you want to clear your API credentials?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await bybitApi.clearCredentials();
+              setApiKey('');
+              setApiSecret('');
+              setCredentialsLoaded(false);
+              Alert.alert('Success', 'API credentials cleared successfully!');
+            } catch (error) {
+              console.error('Error clearing credentials:', error);
+              Alert.alert('Error', 'Failed to clear API credentials.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderHeaderRight = () => (
@@ -185,7 +236,11 @@ export default function HomeScreen() {
       onPress={() => setShowApiConfig(!showApiConfig)}
       style={styles.headerButton}
     >
-      <IconSymbol name="gear" color={colors.primary} size={24} />
+      <IconSymbol 
+        name="gear" 
+        color={credentialsLoaded ? colors.success : colors.primary} 
+        size={24} 
+      />
     </Pressable>
   );
 
@@ -217,14 +272,23 @@ export default function HomeScreen() {
           {/* API Configuration Section */}
           {showApiConfig && (
             <View style={[commonStyles.card, styles.apiConfigCard]}>
-              <Text style={commonStyles.subtitle}>Bybit API Configuration</Text>
+              <View style={styles.apiConfigHeader}>
+                <Text style={commonStyles.subtitle}>Bybit API Configuration</Text>
+                {credentialsLoaded && (
+                  <View style={styles.credentialsBadge}>
+                    <IconSymbol name="checkmark.circle.fill" color={colors.success} size={16} />
+                    <Text style={styles.credentialsBadgeText}>Saved</Text>
+                  </View>
+                )}
+              </View>
+              
               <Text style={[commonStyles.textSecondary, styles.apiNote]}>
-                Note: API credentials are optional. The app works with public endpoints for price data.
+                Your API credentials are stored securely on your device. The app uses public endpoints for price data, so API keys are optional.
               </Text>
               
               <TextInput
                 style={commonStyles.input}
-                placeholder="API Key (Optional)"
+                placeholder="API Key"
                 placeholderTextColor={colors.textSecondary}
                 value={apiKey}
                 onChangeText={setApiKey}
@@ -233,7 +297,7 @@ export default function HomeScreen() {
               
               <TextInput
                 style={commonStyles.input}
-                placeholder="API Secret (Optional)"
+                placeholder="API Secret"
                 placeholderTextColor={colors.textSecondary}
                 value={apiSecret}
                 onChangeText={setApiSecret}
@@ -241,12 +305,23 @@ export default function HomeScreen() {
                 autoCapitalize="none"
               />
               
-              <Pressable
-                style={[buttonStyles.primary, styles.saveButton]}
-                onPress={handleSaveApiConfig}
-              >
-                <Text style={buttonStyles.text}>Save Configuration</Text>
-              </Pressable>
+              <View style={styles.apiConfigButtons}>
+                <Pressable
+                  style={[buttonStyles.primary, styles.saveButton]}
+                  onPress={handleSaveApiConfig}
+                >
+                  <Text style={buttonStyles.text}>Save Configuration</Text>
+                </Pressable>
+                
+                {credentialsLoaded && (
+                  <Pressable
+                    style={[buttonStyles.secondary, styles.clearButton]}
+                    onPress={handleClearApiConfig}
+                  >
+                    <Text style={buttonStyles.text}>Clear</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           )}
 
@@ -440,12 +515,39 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
   },
+  apiConfigHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  credentialsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.success + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  credentialsBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.success,
+  },
   apiNote: {
     marginBottom: 16,
     fontStyle: 'italic',
   },
+  apiConfigButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   saveButton: {
-    marginTop: 8,
+    flex: 1,
+  },
+  clearButton: {
+    paddingHorizontal: 24,
   },
   predictionInputCard: {
     marginHorizontal: 16,
