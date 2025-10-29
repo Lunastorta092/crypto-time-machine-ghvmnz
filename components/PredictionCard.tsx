@@ -1,18 +1,14 @@
 
 import React from 'react';
+import { PricePrediction } from '@/types/crypto';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, commonStyles } from '@/styles/commonStyles';
-import { PricePrediction } from '@/types/crypto';
 
 interface PredictionCardProps {
   prediction: PricePrediction;
 }
 
 export default function PredictionCard({ prediction }: PredictionCardProps) {
-  const priceChange = prediction.predictedPrice - prediction.currentPrice;
-  const priceChangePercent = (priceChange / prediction.currentPrice) * 100;
-  const isPositive = priceChange >= 0;
-
   const getTrendColor = () => {
     switch (prediction.trend) {
       case 'bullish':
@@ -20,7 +16,7 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
       case 'bearish':
         return colors.danger;
       default:
-        return colors.secondary;
+        return colors.textSecondary;
     }
   };
 
@@ -35,76 +31,74 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
     }
   };
 
+  const priceChange = prediction.predictedPrice - prediction.currentPrice;
+  const priceChangePercent = (priceChange / prediction.currentPrice) * 100;
+  const isPositive = priceChange >= 0;
+
   return (
-    <View style={[commonStyles.card, styles.card]}>
+    <View style={[commonStyles.card, styles.container]}>
       <View style={styles.header}>
         <Text style={commonStyles.subtitle}>Price Prediction</Text>
-        <Text style={styles.emoji}>{getTrendEmoji()}</Text>
-      </View>
-
-      <View style={styles.priceContainer}>
-        <View style={styles.priceSection}>
-          <Text style={commonStyles.textSecondary}>Current Price</Text>
-          <Text style={styles.currentPrice}>
-            ${prediction.currentPrice.toLocaleString()}
-          </Text>
-        </View>
-
-        <View style={styles.arrow}>
-          <Text style={styles.arrowText}>→</Text>
-        </View>
-
-        <View style={styles.priceSection}>
-          <Text style={commonStyles.textSecondary}>Predicted Price</Text>
-          <Text style={[styles.predictedPrice, { color: isPositive ? colors.success : colors.danger }]}>
-            ${prediction.predictedPrice.toLocaleString()}
+        <View style={[styles.trendBadge, { backgroundColor: getTrendColor() + '20' }]}>
+          <Text style={[styles.trendText, { color: getTrendColor() }]}>
+            {getTrendEmoji()} {prediction.trend.toUpperCase()}
           </Text>
         </View>
       </View>
 
-      <View style={styles.changeContainer}>
-        <Text style={[styles.changeText, { color: isPositive ? colors.success : colors.danger }]}>
-          {isPositive ? '+' : ''}{priceChange.toFixed(2)} ({isPositive ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+      <View style={styles.symbolRow}>
+        <Text style={styles.symbolText}>{prediction.symbol.replace('USDT', '')}</Text>
+        <Text style={styles.confidenceText}>
+          Confidence: {prediction.confidence.toFixed(0)}%
         </Text>
       </View>
 
-      <View style={styles.detailsContainer}>
-        <View style={styles.detailRow}>
-          <Text style={commonStyles.textSecondary}>Target Date</Text>
-          <Text style={styles.detailValue}>
-            {prediction.targetDate.toLocaleDateString()} {prediction.targetDate.toLocaleTimeString()}
+      <View style={styles.priceContainer}>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Current Price</Text>
+          <Text style={styles.currentPrice}>
+            ${prediction.currentPrice.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </Text>
         </View>
 
-        <View style={styles.detailRow}>
-          <Text style={commonStyles.textSecondary}>Trend</Text>
-          <View style={[styles.trendBadge, { backgroundColor: getTrendColor() + '20' }]}>
-            <Text style={[styles.trendText, { color: getTrendColor() }]}>
-              {prediction.trend.toUpperCase()}
-            </Text>
-          </View>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Predicted Price</Text>
+          <Text style={[styles.predictedPrice, { color: isPositive ? colors.success : colors.danger }]}>
+            ${prediction.predictedPrice.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </Text>
         </View>
 
-        <View style={styles.detailRow}>
-          <Text style={commonStyles.textSecondary}>Confidence</Text>
-          <View style={styles.confidenceContainer}>
-            <View style={styles.confidenceBar}>
-              <View
-                style={[
-                  styles.confidenceFill,
-                  { width: `${prediction.confidence}%`, backgroundColor: getTrendColor() }
-                ]}
-              />
-            </View>
-            <Text style={styles.confidenceText}>{prediction.confidence.toFixed(0)}%</Text>
-          </View>
+        <View style={styles.changeContainer}>
+          <Text style={[styles.changeText, { color: isPositive ? colors.success : colors.danger }]}>
+            {isPositive ? '+' : ''}
+            ${Math.abs(priceChange).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+            {' '}
+            ({isPositive ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+          </Text>
         </View>
+      </View>
+
+      <View style={styles.targetDateContainer}>
+        <Text style={styles.targetDateLabel}>Target Date & Time</Text>
+        <Text style={styles.targetDateValue}>
+          {prediction.targetDate.toLocaleDateString()} at {prediction.targetDate.toLocaleTimeString()}
+        </Text>
       </View>
 
       <View style={styles.disclaimer}>
         <Text style={styles.disclaimerText}>
-          ⚠️ This is a basic prediction model. Cryptocurrency markets are highly volatile. 
-          Always do your own research before making investment decisions.
+          ⚠️ This prediction is based on historical data and linear regression analysis. 
+          Cryptocurrency markets are highly volatile and unpredictable. 
+          This is not financial advice.
         </Text>
       </View>
     </View>
@@ -112,7 +106,7 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
 }
 
 const styles = StyleSheet.create({
-  card: {
+  container: {
     marginHorizontal: 16,
   },
   header: {
@@ -121,100 +115,93 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  emoji: {
-    fontSize: 24,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  priceSection: {
-    flex: 1,
-  },
-  arrow: {
-    paddingHorizontal: 8,
-  },
-  arrowText: {
-    fontSize: 24,
-    color: colors.textSecondary,
-  },
-  currentPrice: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-    marginTop: 4,
-  },
-  predictedPrice: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  changeContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 16,
-  },
-  changeText: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  detailsContainer: {
-    gap: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
   trendBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 16,
   },
   trendText: {
     fontSize: 12,
     fontWeight: '700',
   },
-  confidenceContainer: {
+  symbolRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 20,
   },
-  confidenceBar: {
-    width: 100,
-    height: 8,
-    backgroundColor: colors.border,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  confidenceFill: {
-    height: '100%',
-    borderRadius: 4,
+  symbolText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.text,
   },
   confidenceText: {
     fontSize: 14,
     fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  priceContainer: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  currentPrice: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  predictedPrice: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  changeContainer: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignItems: 'center',
+  },
+  changeText: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  targetDateContainer: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  targetDateLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  targetDateValue: {
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.text,
   },
   disclaimer: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: colors.warning + '20',
+    backgroundColor: colors.warning + '10',
     borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warning,
   },
   disclaimerText: {
     fontSize: 12,
-    color: colors.text,
+    color: colors.textSecondary,
     lineHeight: 18,
   },
 });

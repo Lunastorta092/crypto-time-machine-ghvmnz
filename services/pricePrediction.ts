@@ -11,9 +11,27 @@ export class PricePredictionService {
     timestamps: number[],
     targetTimestamp: number
   ): number {
+    console.log('=== PREDICTION CALCULATION START ===');
+    console.log('Historical prices count:', historicalPrices.length);
+    console.log('First price:', historicalPrices[0]);
+    console.log('Last price:', historicalPrices[historicalPrices.length - 1]);
+    console.log('First timestamp:', new Date(timestamps[0]).toISOString());
+    console.log('Last timestamp:', new Date(timestamps[timestamps.length - 1]).toISOString());
+    console.log('Target timestamp:', new Date(targetTimestamp).toISOString());
+
     if (historicalPrices.length < 2) {
+      console.log('Not enough data points, returning last price');
       return historicalPrices[historicalPrices.length - 1] || 0;
     }
+
+    // Normalize timestamps to avoid overflow in calculations
+    // Use hours since first timestamp as the unit
+    const firstTimestamp = timestamps[0];
+    const normalizedTimestamps = timestamps.map(t => (t - firstTimestamp) / (1000 * 60 * 60)); // Convert to hours
+    const normalizedTarget = (targetTimestamp - firstTimestamp) / (1000 * 60 * 60);
+
+    console.log('Normalized timestamps (hours):', normalizedTimestamps.slice(0, 3), '...', normalizedTimestamps.slice(-3));
+    console.log('Normalized target (hours):', normalizedTarget);
 
     // Calculate linear regression
     const n = historicalPrices.length;
@@ -23,19 +41,59 @@ export class PricePredictionService {
     let sumXX = 0;
 
     for (let i = 0; i < n; i++) {
-      sumX += timestamps[i];
+      sumX += normalizedTimestamps[i];
       sumY += historicalPrices[i];
-      sumXY += timestamps[i] * historicalPrices[i];
-      sumXX += timestamps[i] * timestamps[i];
+      sumXY += normalizedTimestamps[i] * historicalPrices[i];
+      sumXX += normalizedTimestamps[i] * normalizedTimestamps[i];
     }
 
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    console.log('Regression sums:', { sumX, sumY, sumXY, sumXX });
+
+    const denominator = (n * sumXX - sumX * sumX);
+    console.log('Denominator:', denominator);
+
+    if (Math.abs(denominator) < 0.0001) {
+      console.log('Denominator too small, using average price');
+      return sumY / n;
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / denominator;
     const intercept = (sumY - slope * sumX) / n;
 
-    // Predict price at target timestamp
-    const predictedPrice = slope * targetTimestamp + intercept;
+    console.log('Slope:', slope);
+    console.log('Intercept:', intercept);
 
-    return predictedPrice;
+    // Predict price at target timestamp
+    const predictedPrice = slope * normalizedTarget + intercept;
+
+    console.log('Raw predicted price:', predictedPrice);
+
+    // Sanity check: predicted price should be within reasonable bounds
+    const currentPrice = historicalPrices[historicalPrices.length - 1];
+    const minHistoricalPrice = Math.min(...historicalPrices);
+    const maxHistoricalPrice = Math.max(...historicalPrices);
+    
+    console.log('Current price:', currentPrice);
+    console.log('Historical range:', minHistoricalPrice, '-', maxHistoricalPrice);
+
+    // If prediction is wildly off (more than 10x the historical range), use a more conservative estimate
+    const historicalRange = maxHistoricalPrice - minHistoricalPrice;
+    const maxReasonableChange = historicalRange * 5; // Allow up to 5x the historical range
+    
+    if (Math.abs(predictedPrice - currentPrice) > maxReasonableChange) {
+      console.log('Prediction too extreme, using trend-based estimate');
+      // Use a simple trend-based estimate instead
+      const recentPrices = historicalPrices.slice(-20);
+      const recentChange = recentPrices[recentPrices.length - 1] - recentPrices[0];
+      const avgChangePerHour = recentChange / 20;
+      const hoursToTarget = normalizedTarget - normalizedTimestamps[normalizedTimestamps.length - 1];
+      const trendBasedPrediction = currentPrice + (avgChangePerHour * hoursToTarget);
+      console.log('Trend-based prediction:', trendBasedPrediction);
+      return Math.max(0, trendBasedPrediction);
+    }
+
+    console.log('=== PREDICTION CALCULATION END ===');
+    return Math.max(0, predictedPrice);
   }
 
   /**
@@ -68,6 +126,8 @@ export class PricePredictionService {
 
     const changePercent = ((secondAvg - firstAvg) / firstAvg) * 100;
 
+    console.log('Trend analysis - Change percent:', changePercent.toFixed(2) + '%');
+
     if (changePercent > 2) return 'bullish';
     if (changePercent < -2) return 'bearish';
     return 'neutral';
@@ -87,6 +147,8 @@ export class PricePredictionService {
     const stdDev = Math.sqrt(variance);
     const volatility = (stdDev / mean) * 100;
 
+    console.log('Volatility:', volatility.toFixed(2) + '%');
+
     // Lower volatility = higher confidence
     let confidence = 100 - Math.min(volatility * 2, 70);
     
@@ -94,7 +156,10 @@ export class PricePredictionService {
     const dataBonus = Math.min((prices.length / 200) * 20, 20);
     confidence += dataBonus;
 
-    return Math.max(30, Math.min(95, confidence));
+    const finalConfidence = Math.max(30, Math.min(95, confidence));
+    console.log('Confidence score:', finalConfidence.toFixed(0) + '%');
+
+    return finalConfidence;
   }
 
   async generatePrediction(
@@ -103,11 +168,45 @@ export class PricePredictionService {
     historicalData: any[],
     targetDate: Date
   ): Promise<PricePrediction> {
-    console.log('Generating prediction for', symbol, 'with', historicalData.length, 'data points');
+    console.log('========================================');
+    console.log('GENERATING PREDICTION');
+    console.log('Symbol:', symbol);
+    console.log('Current price:', currentPrice);
+    console.log('Historical data points:', historicalData.length);
+    console.log('Target date:', targetDate.toISOString());
+    console.log('========================================');
 
+    if (!historicalData || historicalData.length === 0) {
+      console.error('ERROR: No historical data available');
+      throw new Error('No historical data available for prediction');
+    }
+
+    // Bybit returns data in format: [timestamp, open, high, low, close, volume, turnover]
     // Extract prices and timestamps from historical data
-    const prices = historicalData.map(candle => parseFloat(candle[4])); // Close price
-    const timestamps = historicalData.map(candle => parseInt(candle[0])); // Timestamp
+    const prices: number[] = [];
+    const timestamps: number[] = [];
+
+    for (let i = 0; i < historicalData.length; i++) {
+      const candle = historicalData[i];
+      if (candle && candle.length >= 5) {
+        const timestamp = parseInt(candle[0]);
+        const closePrice = parseFloat(candle[4]);
+        
+        if (!isNaN(timestamp) && !isNaN(closePrice) && closePrice > 0) {
+          timestamps.push(timestamp);
+          prices.push(closePrice);
+        }
+      }
+    }
+
+    console.log('Extracted prices:', prices.length);
+    console.log('Sample prices:', prices.slice(0, 5));
+    console.log('Sample timestamps:', timestamps.slice(0, 5).map(t => new Date(t).toISOString()));
+
+    if (prices.length < 2) {
+      console.error('ERROR: Not enough valid price data');
+      throw new Error('Not enough valid price data for prediction');
+    }
 
     // Predict price
     const targetTimestamp = targetDate.getTime();
@@ -117,14 +216,25 @@ export class PricePredictionService {
     const trend = this.determineTrend(prices);
     const confidence = this.calculateConfidence(prices);
 
-    return {
+    const result: PricePrediction = {
       symbol,
       currentPrice,
-      predictedPrice: Math.max(0, predictedPrice), // Ensure non-negative
+      predictedPrice: Math.max(0, predictedPrice),
       targetDate,
       confidence,
       trend,
     };
+
+    console.log('========================================');
+    console.log('PREDICTION RESULT:');
+    console.log('Current Price:', currentPrice);
+    console.log('Predicted Price:', predictedPrice.toFixed(2));
+    console.log('Change:', ((predictedPrice - currentPrice) / currentPrice * 100).toFixed(2) + '%');
+    console.log('Trend:', trend);
+    console.log('Confidence:', confidence.toFixed(0) + '%');
+    console.log('========================================');
+
+    return result;
   }
 }
 

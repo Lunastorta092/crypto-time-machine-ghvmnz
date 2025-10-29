@@ -51,43 +51,71 @@ export default function HomeScreen() {
   const loadCryptoPrices = async () => {
     try {
       setLoading(true);
+      console.log('Loading crypto prices...');
       const prices = await bybitApi.getMultipleTickers(POPULAR_SYMBOLS);
       setCryptoPrices(prices);
-      console.log('Loaded', prices.length, 'crypto prices');
+      console.log('Successfully loaded', prices.length, 'crypto prices');
     } catch (error) {
       console.error('Error loading crypto prices:', error);
-      Alert.alert('Error', 'Failed to load cryptocurrency prices. Please check your internet connection.');
+      Alert.alert(
+        'Error', 
+        'Failed to load cryptocurrency prices. Please check your internet connection and try again.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleGeneratePrediction = async () => {
+    console.log('========================================');
+    console.log('GENERATE PREDICTION BUTTON PRESSED');
+    console.log('Selected symbol:', selectedSymbol);
+    console.log('Target date:', targetDate.toISOString());
+    console.log('Current time:', new Date().toISOString());
+    console.log('========================================');
+
     if (targetDate <= new Date()) {
-      Alert.alert('Invalid Date', 'Please select a future date and time for prediction.');
+      Alert.alert(
+        'Invalid Date', 
+        'Please select a future date and time for prediction. The target date must be after the current time.'
+      );
       return;
     }
 
     try {
       setPredictionLoading(true);
-      console.log('Generating prediction for', selectedSymbol, 'at', targetDate);
+      setPrediction(null); // Clear previous prediction
 
+      console.log('Step 1: Fetching current price data...');
       // Get current price
       const currentPriceData = await bybitApi.getTickerPrice(selectedSymbol);
       if (!currentPriceData) {
-        Alert.alert('Error', 'Failed to fetch current price data.');
+        console.error('Failed to fetch current price data');
+        Alert.alert(
+          'Error', 
+          'Failed to fetch current price data. Please check your internet connection and try again.'
+        );
         return;
       }
 
       const currentPrice = parseFloat(currentPriceData.lastPrice);
+      console.log('Current price:', currentPrice);
 
+      console.log('Step 2: Fetching historical data...');
       // Get historical data
       const historicalData = await bybitApi.getHistoricalKlines(selectedSymbol, '1h', 200);
+      console.log('Historical data received:', historicalData.length, 'candles');
+
       if (historicalData.length === 0) {
-        Alert.alert('Error', 'Failed to fetch historical data for prediction.');
+        console.error('No historical data received');
+        Alert.alert(
+          'Error', 
+          'Failed to fetch historical data for prediction. The API may be temporarily unavailable. Please try again later.'
+        );
         return;
       }
 
+      console.log('Step 3: Generating prediction...');
       // Generate prediction
       const predictionResult = await predictionService.generatePrediction(
         selectedSymbol,
@@ -96,11 +124,24 @@ export default function HomeScreen() {
         targetDate
       );
 
+      console.log('Step 4: Prediction generated successfully!');
       setPrediction(predictionResult);
-      console.log('Prediction generated:', predictionResult);
+      
+      // Show success message
+      Alert.alert(
+        'Prediction Generated! 🎯',
+        `The predicted price for ${selectedSymbol.replace('USDT', '')} at ${targetDate.toLocaleString()} is $${predictionResult.predictedPrice.toFixed(2)}`
+      );
     } catch (error) {
       console.error('Error generating prediction:', error);
-      Alert.alert('Error', 'Failed to generate price prediction. Please try again.');
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
+      Alert.alert(
+        'Prediction Error', 
+        'Failed to generate price prediction. This could be due to insufficient data or API issues. Please try again with a different cryptocurrency or time period.'
+      );
     } finally {
       setPredictionLoading(false);
     }
@@ -114,6 +155,7 @@ export default function HomeScreen() {
       newDate.setMonth(selectedDate.getMonth());
       newDate.setDate(selectedDate.getDate());
       setTargetDate(newDate);
+      console.log('Date changed to:', newDate.toISOString());
     }
   };
 
@@ -124,6 +166,7 @@ export default function HomeScreen() {
       newDate.setHours(selectedTime.getHours());
       newDate.setMinutes(selectedTime.getMinutes());
       setTargetDate(newDate);
+      console.log('Time changed to:', newDate.toISOString());
     }
   };
 
@@ -220,12 +263,27 @@ export default function HomeScreen() {
                   Loading market data...
                 </Text>
               </View>
+            ) : cryptoPrices.length === 0 ? (
+              <View style={[commonStyles.card, styles.errorCard]}>
+                <Text style={styles.errorText}>
+                  Unable to load market data. Please check your internet connection and try again.
+                </Text>
+                <Pressable
+                  style={[buttonStyles.primary, styles.retryButton]}
+                  onPress={loadCryptoPrices}
+                >
+                  <Text style={buttonStyles.text}>Retry</Text>
+                </Pressable>
+              </View>
             ) : (
               cryptoPrices.map((crypto) => (
                 <CryptoCard
                   key={crypto.symbol}
                   crypto={crypto}
-                  onPress={() => setSelectedSymbol(crypto.symbol)}
+                  onPress={() => {
+                    setSelectedSymbol(crypto.symbol);
+                    console.log('Selected symbol:', crypto.symbol);
+                  }}
                 />
               ))
             )}
@@ -247,7 +305,10 @@ export default function HomeScreen() {
                       styles.symbolButton,
                       selectedSymbol === symbol && styles.symbolButtonActive,
                     ]}
-                    onPress={() => setSelectedSymbol(symbol)}
+                    onPress={() => {
+                      setSelectedSymbol(symbol);
+                      console.log('Selected symbol:', symbol);
+                    }}
                   >
                     <Text
                       style={[
@@ -307,14 +368,23 @@ export default function HomeScreen() {
               )}
 
               <Pressable
-                style={[buttonStyles.primary, styles.predictButton]}
+                style={[
+                  buttonStyles.primary, 
+                  styles.predictButton,
+                  predictionLoading && styles.buttonDisabled
+                ]}
                 onPress={handleGeneratePrediction}
                 disabled={predictionLoading}
               >
                 {predictionLoading ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <View style={styles.loadingButtonContent}>
+                    <ActivityIndicator color="#ffffff" />
+                    <Text style={[buttonStyles.text, styles.loadingButtonText]}>
+                      Generating...
+                    </Text>
+                  </View>
                 ) : (
-                  <Text style={buttonStyles.text}>Generate Prediction</Text>
+                  <Text style={buttonStyles.text}>🔮 Generate Prediction</Text>
                 )}
               </Pressable>
             </View>
@@ -349,6 +419,19 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
+  },
+  errorCard: {
+    marginHorizontal: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 32,
   },
   headerButton: {
     padding: 8,
@@ -425,6 +508,17 @@ const styles = StyleSheet.create({
   },
   predictButton: {
     marginTop: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  loadingButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingButtonText: {
+    marginLeft: 8,
   },
   bottomSpacer: {
     height: 40,
